@@ -19,6 +19,10 @@ def get_columns():
         {"label": "Minimum Quantity", "fieldname": "minimum_quantity", "fieldtype": "Float", "width": 120},
         {"label": "Discount %", "fieldname": "discount_percentage", "fieldtype": "Percent", "width": 100},
         {"label": "Free Quantity", "fieldname": "free_quantity", "fieldtype": "Float", "width": 100},
+        
+        {"label": "Free Product", "fieldname": "free_product", "fieldtype": "Link", "options": "Item", "width": 140},
+        {"label": "Amount Off", "fieldname": "amount_off", "fieldtype": "Currency", "width": 120},
+
         {"label": "Valid From", "fieldname": "valid_from", "fieldtype": "Date", "width": 110},
         {"label": "Valid To", "fieldname": "valid_to", "fieldtype": "Date", "width": 110},
         {"label": "Total Invoice Amount", "fieldname": "invoice_amount", "fieldtype": "Currency", "width": 130},
@@ -216,7 +220,6 @@ def _apply_report_filters(result_rows, filters):
 
     return rows
 
-
 def _get_totals_for_scheme(scheme_doc, party_side, parties, item_codes=None, item_groups=None, report_from=None, report_to=None):
     """
     Returns dict keyed by (party_name or None, item_key or None) -> { total_amount, total_qty }
@@ -351,6 +354,123 @@ def _get_totals_for_scheme(scheme_doc, party_side, parties, item_codes=None, ite
 
     return totals_map
 
+def _resolve_scheme_rule_values(scheme_doc):
+    """
+    Returns normalized rule values regardless of where they are stored.
+    Compatible with old single-field logic and new child-table slabs.
+    """
+
+    result = {
+        "minimum_quantity": 0.0,
+        "minimum_amount": 0.0,
+        "free_quantity": 0.0,
+        "discount_percentage": 0.0,
+        "free_product": None,
+        "amount_off": 0.0,
+    }
+
+    validation_type = (scheme_doc.type_of_promo_validation or "").strip()
+
+    # -------------------------------------------------------
+    # Based on Minimum Quantity
+    # -------------------------------------------------------
+    if validation_type == "Based on Minimum Quantity":
+        rows = scheme_doc.get("quantity_discount_slabs") or []
+        if rows:
+            row = rows[0]  # first slab for now
+            result["minimum_quantity"] = flt(row.minimum_quantity)
+            result["free_quantity"] = flt(row.free_quantity)
+            result["free_product"] = row.free_product
+
+    # -------------------------------------------------------
+    # Based on Minimum Quantity & Amount
+    # -------------------------------------------------------
+    elif validation_type == "Based on Minimum Quantity & Amount":
+        rows = scheme_doc.get("free_qty_with_amount_off") or []
+        if rows:
+            row = rows[0]
+            result["minimum_quantity"] = flt(row.min_qty)
+            result["free_quantity"] = flt(row.free_qty)
+            result["amount_off"] = flt(row.amount_off)
+
+    # -------------------------------------------------------
+    # Old / fallback logic (backward compatible)
+    # -------------------------------------------------------
+    else:
+        result["minimum_quantity"] = flt(getattr(scheme_doc, "minimum_quantity", 0))
+        result["minimum_amount"] = flt(getattr(scheme_doc, "minimum_amount", 0))
+        result["free_quantity"] = flt(getattr(scheme_doc, "free_quantity", 0))
+        result["discount_percentage"] = flt(getattr(scheme_doc, "discount_percentage", 0))
+
+    return result
+
+def _select_applicable_slab(scheme_doc, total_qty, total_amount):
+    """
+    Selects the best matching slab row based on totals.
+    Returns a dict with normalized values.
+    """
+
+    result = {
+        "minimum_quantity": 0.0,
+        "minimum_amount": 0.0,
+        "free_quantity": 0.0,
+        "discount_percentage": 0.0,
+        "free_product": None,
+        "amount_off": 0.0,
+    }
+
+    validation_type = (scheme_doc.type_of_promo_validation or "").strip()
+
+    # =====================================================
+    # BASED ON MINIMUM QUANTITY
+    # =====================================================
+    if validation_type == "Based on Minimum Quantity":
+        rows = scheme_doc.get("quantity_discount_slabs") or []
+
+        applicable = [
+            r for r in rows
+            if flt(r.minimum_quantity) <= flt(total_qty)
+        ]
+
+        if applicable:
+            row = max(applicable, key=lambda r: flt(r.minimum_quantity))
+        elif rows:
+            # Fallback to first slab
+            row = rows[0]
+        else:
+            row = None
+
+        if row:
+            result["minimum_quantity"] = flt(row.minimum_quantity)
+            result["free_quantity"] = flt(row.free_quantity)
+            result["free_product"] = row.free_product
+
+    # =====================================================
+    # BASED ON MINIMUM QUANTITY AND AMOUNT
+    # =====================================================
+    elif validation_type == "Based on Minimum Quantity and Amount":
+        rows = scheme_doc.get("free_qty_with_amount_off") or []
+
+        applicable = [
+            r for r in rows
+            if flt(r.min_qty) <= flt(total_qty)
+            and flt(r.amount_off) <= flt(total_amount)
+        ]
+
+        if applicable:
+            row = max(applicable, key=lambda r: flt(r.min_qty))
+        elif rows:
+            # Fallback to first slab
+            row = rows[0]
+        else:
+            row = None
+
+        if row:
+            result["minimum_quantity"] = flt(row.min_qty)
+            result["free_quantity"] = flt(row.free_qty)
+            result["amount_off"] = flt(row.amount_off)
+
+    return result
 
 def get_data(filters):
     """
@@ -435,20 +555,35 @@ def get_data(filters):
                 total_amount = flt(totals.get("total_amount") or 0.0)
                 total_qty = flt(totals.get("total_qty") or 0.0)
 
+                slab_vals = _select_applicable_slab(
+                    scheme_doc,
+                    total_qty=total_qty,
+                    total_amount=total_amount
+                )
+
+
                 validation_type = (scheme_doc.type_of_promo_validation or "").strip()
                 eligible = False
-                if validation_type == "Based on Minimum Amount":
-                    min_amount = flt(getattr(scheme_doc, "minimum_amount", 0) or 0)
-                    if min_amount > 0 and total_amount >= min_amount:
+
+                if validation_type == "Based on Minimum Quantity":
+                    if slab_vals["minimum_quantity"] > 0 and total_qty >= slab_vals["minimum_quantity"]:
                         eligible = True
-                elif validation_type == "Based on Minimum Quantity":
-                    min_qty = flt(getattr(scheme_doc, "minimum_quantity", 0) or 0)
-                    if min_qty > 0 and total_qty >= min_qty:
+
+                elif validation_type == "Based on Minimum Quantity and Amount":
+                    if (
+                        slab_vals["minimum_quantity"] > 0
+                        and total_qty >= slab_vals["minimum_quantity"]
+                        and slab_vals["amount_off"] > 0
+                    ):
                         eligible = True
+
                 else:
                     eligible = (total_amount > 0 or total_qty > 0)
 
+
                 display_item = key if key else "-"
+                # Extract free product and amount off from scheme rules (first rule only)
+                rule_vals = _resolve_scheme_rule_values(scheme_doc)
 
                 result_rows.append({
                     "scheme_name": scheme_doc.scheme_name or scheme_doc.name,
@@ -457,9 +592,14 @@ def get_data(filters):
                     "apply_on": scheme_doc.apply_on or "-",
                     "item_or_group": display_item,
                     "minimum_amount": flt(getattr(scheme_doc, "minimum_amount", 0) or 0),
-                    "minimum_quantity": flt(getattr(scheme_doc, "minimum_quantity", 0) or 0),
+                    # "minimum_quantity": flt(getattr(scheme_doc, "minimum_quantity", 0) or 0),
                     "discount_percentage": flt(getattr(scheme_doc, "discount_percentage", 0) or 0),
-                    "free_quantity": flt(getattr(scheme_doc, "free_quantity", 0) or 0),
+                    # "free_quantity": flt(getattr(scheme_doc, "free_quantity", 0) or 0),
+                    "minimum_quantity": slab_vals["minimum_quantity"],
+                    "free_quantity": slab_vals["free_quantity"],
+                    "free_product": slab_vals["free_product"],
+                    "amount_off": slab_vals["amount_off"],
+
                     "valid_from": getattr(scheme_doc, "valid_from", None),
                     "valid_to": getattr(scheme_doc, "valid_to", None),
                     "invoice_amount": total_amount,
@@ -469,206 +609,3 @@ def get_data(filters):
 
     result_rows = _apply_report_filters(result_rows, filters or {})
     return result_rows
-
-
-# def _get_totals_for_scheme(scheme_doc, party_side, parties, items, report_from=None, report_to=None):
-#     """
-#     Returns dict keyed by (party_name or None, item_code or None) -> { total_amount, total_qty }
-#     Enhanced: if no concrete parties given, apply scheme to ALL parties of that side (Selling/Buying)
-#     """
-#     # Normalize date range
-#     if report_from:
-#         from_date = getdate(report_from)
-#     else:
-#         from_date = getdate(getattr(scheme_doc, "valid_from", None)) if getattr(scheme_doc, "valid_from", None) else None
-
-#     if report_to:
-#         to_date = getdate(report_to)
-#     else:
-#         to_date = getdate(getattr(scheme_doc, "valid_to", None)) if getattr(scheme_doc, "valid_to", None) else None
-
-#     # Build party list values (only concrete names, ignore 'All' marker)
-#     concrete_parties = [pname for (ptype, pname) in parties if pname]
-#     concrete_items = [i for i in items if i]
-
-#     params = []
-#     where_clauses = ["si.docstatus = 1"]
-
-#     # --- Date filter ---
-#     if from_date and to_date:
-#         where_clauses.append("si.posting_date BETWEEN %s AND %s")
-#         params.extend([str(from_date), str(to_date)])
-#     elif from_date:
-#         where_clauses.append("si.posting_date >= %s")
-#         params.append(str(from_date))
-#     elif to_date:
-#         where_clauses.append("si.posting_date <= %s")
-#         params.append(str(to_date))
-
-#     # --- Party filter logic ---
-#     # If no specific parties defined, we apply to ALL customers/suppliers automatically
-#     if party_side == "Selling":
-#         party_col = "si.customer"
-#         header = "`tabSales Invoice`"
-#         item_table = "`tabSales Invoice Item`"
-#     else:
-#         party_col = "si.supplier"
-#         header = "`tabPurchase Invoice`"
-#         item_table = "`tabPurchase Invoice Item`"
-
-#     if concrete_parties:
-#         placeholders = ", ".join(["%s"] * len(concrete_parties))
-#         where_clauses.append(f"{party_col} IN ({placeholders})")
-#         params.extend(concrete_parties)
-#     else:
-#         # No party specified in scheme → apply to all customers/suppliers of that side
-#         # (no party filter needed here)
-#         pass
-
-#     # --- Item filter ---
-#     item_clause = ""
-#     if concrete_items:
-#         placeholders = ", ".join(["%s"] * len(concrete_items))
-#         item_clause = f" AND sii.item_code IN ({placeholders})"
-
-#     # --- Final SQL ---
-#     sql = f"""
-#         SELECT
-#             {party_col} AS party_name,
-#             sii.item_code AS item_code,
-#             SUM(COALESCE(sii.base_net_amount, sii.base_amount, sii.amount, 0)) AS total_amount,
-#             SUM(COALESCE(sii.qty, 0)) AS total_qty
-#         FROM {header} si
-#         JOIN {item_table} sii ON sii.parent = si.name
-#         WHERE {" AND ".join(where_clauses)}
-#         {item_clause}
-#         GROUP BY {party_col}, sii.item_code
-#     """
-
-#     final_params = list(params)
-#     if concrete_items:
-#         final_params.extend(concrete_items)
-
-#     rows = frappe.db.sql(sql, tuple(final_params), as_dict=True) or []
-
-#     totals_map = {}
-#     for r in rows:
-#         p = r.get("party_name") or None
-#         item = r.get("item_code") or None
-#         totals_map[(p, item)] = {
-#             "total_amount": flt(r.get("total_amount") or 0.0),
-#             "total_qty": flt(r.get("total_qty") or 0.0)
-#         }
-
-#     return totals_map
-
-
-# def get_data(filters):
-#     # Filter schemes first (supports scheme_name, apply_on, from_date, to_date)
-#     sql_where = ["1=1"]
-#     params = {}
-
-#     if filters.get("scheme_name"):
-#         sql_where.append("name = %(scheme_name)s")
-#         params["scheme_name"] = filters.get("scheme_name")
-
-#     if filters.get("apply_on"):
-#         sql_where.append("apply_on = %(apply_on)s")
-#         params["apply_on"] = filters.get("apply_on")
-
-#     schemes = frappe.db.sql(
-#         f"""SELECT name FROM `tabCustom Promotional Scheme`
-#             WHERE {" AND ".join(sql_where)} ORDER BY creation DESC""",
-#         params, as_dict=True
-#     ) or []
-
-#     result_rows = []
-
-#     for s in schemes:
-#         try:
-#             scheme_doc = frappe.get_doc("Custom Promotional Scheme", s.name)
-#         except Exception:
-#             continue
-
-#         parties_dict = _extract_party_values_from_scheme(scheme_doc)
-#         parties = []
-#         party_side = (scheme_doc.select_the_party or "").strip()  # "Selling" or "Buying"
-
-#         if party_side == "Selling":
-#             if parties_dict["customers"]:
-#                 for c in sorted(parties_dict["customers"]):
-#                     parties.append(("Customer", c))
-#             else:
-#                 parties = []  # none means apply to all
-#         elif party_side == "Buying":
-#             if parties_dict["suppliers"]:
-#                 for sname in sorted(parties_dict["suppliers"]):
-#                     parties.append(("Supplier", sname))
-#             else:
-#                 parties = []
-#         else:
-#             party_side = "Selling"
-#             parties = []
-
-#         # Items
-#         item_codes = _extract_item_codes_from_scheme(scheme_doc)
-#         items = sorted(item_codes) if item_codes else [None]
-
-#         report_from = filters.get("from_date") or None
-#         report_to = filters.get("to_date") or None
-
-#         totals_map = _get_totals_for_scheme(scheme_doc, party_side, parties, items, report_from, report_to)
-
-#         # Build result rows
-#         all_parties = set([p for (p, _) in totals_map.keys() if p]) or set()
-#         all_items = set([i for (_, i) in totals_map.keys() if i]) or set()
-
-#         # When no specific parties defined, use all found in totals_map
-#         if not parties:
-#             if party_side == "Selling":
-#                 parties = [("Customer", p) for p in all_parties]
-#             else:
-#                 parties = [("Supplier", p) for p in all_parties]
-
-#         for party_type, party_name in parties:
-#             for item_code in items:
-#                 key = (party_name, item_code)
-#                 totals = totals_map.get(key, {"total_amount": 0.0, "total_qty": 0.0})
-#                 total_amount = flt(totals.get("total_amount") or 0.0)
-#                 total_qty = flt(totals.get("total_qty") or 0.0)
-
-#                 validation_type = (scheme_doc.type_of_promo_validation or "").strip()
-#                 min_amount = flt(getattr(scheme_doc, "minimum_amount", 0) or 0)
-#                 min_qty = flt(getattr(scheme_doc, "minimum_quantity", 0) or 0)
-
-#                 eligible = False
-#                 if validation_type == "Based on Minimum Amount" and min_amount > 0:
-#                     eligible = total_amount >= min_amount
-#                 elif validation_type == "Based on Minimum Quantity" and min_qty > 0:
-#                     eligible = total_qty >= min_qty
-#                 else:
-#                     # fallback: if any non-zero sales/purchase activity
-#                     eligible = (total_amount > 0 or total_qty > 0)
-
-
-#                 item_or_group_display = item_code if item_code else "-"
-
-#                 result_rows.append({
-#                     "scheme_name": scheme_doc.scheme_name or scheme_doc.name,
-#                     "party_type": party_type,
-#                     "party_name": party_name or "All",
-#                     "apply_on": scheme_doc.apply_on or "-",
-#                     "item_or_group": item_or_group_display,
-#                     "minimum_amount": flt(getattr(scheme_doc, "minimum_amount", 0) or 0),
-#                     "minimum_quantity": flt(getattr(scheme_doc, "minimum_quantity", 0) or 0),
-#                     "discount_percentage": flt(getattr(scheme_doc, "discount_percentage", 0) or 0),
-#                     "free_quantity": flt(getattr(scheme_doc, "free_quantity", 0) or 0),
-#                     "valid_from": getattr(scheme_doc, "valid_from", None),
-#                     "valid_to": getattr(scheme_doc, "valid_to", None),
-#                     "invoice_amount": total_amount,
-#                     "invoice_qty": total_qty,
-#                     "eligibility_status": "Eligible" if eligible else "Not Eligible",
-#                 })
-
-#     result_rows = _apply_report_filters(result_rows, filters or {})
-#     return result_rows
