@@ -46,8 +46,11 @@ class CustomPromotionalScheme(Document):
                 frappe.throw("Please add at least one row in Free Qty with Amount Off.")
 
             for row in self.free_qty_with_amount_off:
-                if not row.min_qty or not row.free_qty or not row.amount_off:
-                    frappe.throw("Each row must have Min Qty, Free Qty, and Amount Off.")
+                if not row.min_qty:
+                    frappe.throw("Each row must have Min Qty.")
+                if not row.amount_off:
+                    frappe.throw("Each row must have Amount Off.")
+                # free_qty is optional – no validation required
 
 
     @staticmethod

@@ -596,11 +596,11 @@ def get_data(filters):
                     )
 
                 # 3️⃣ Based on Minimum Quantity and Amount
-                elif validation_type == "Based on Minimum Quantity and Amount":
+                elif validation_type == "Based on Minimum Quantity & Amount":
                     eligible = (
                         slab_vals.get("minimum_quantity", 0) > 0
                         and total_qty >= flt(slab_vals["minimum_quantity"])
-                        and total_amount >= flt(slab_vals.get("amount_off", 0))
+                        and slab_vals.get("amount_off", 0) > 0
                     )
 
                 # fallback (should rarely hit)
