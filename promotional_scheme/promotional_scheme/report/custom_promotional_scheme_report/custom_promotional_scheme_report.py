@@ -580,21 +580,32 @@ def get_data(filters):
                 validation_type = (scheme_doc.type_of_promo_validation or "").strip()
                 eligible = False
 
-                if validation_type == "Based on Minimum Quantity":
-                    if slab_vals["minimum_quantity"] > 0 and total_qty >= slab_vals["minimum_quantity"]:
-                        eligible = True
+                # ----------------------------------
+                # ELIGIBILITY RULES (FINAL & CORRECT)
+                # ----------------------------------
 
+                # 1️⃣ Based on Minimum Amount
+                if validation_type == "Based on Minimum Amount":
+                    eligible = total_amount >= flt(scheme_doc.minimum_amount or 0)
+
+                # 2️⃣ Based on Minimum Quantity
+                elif validation_type == "Based on Minimum Quantity":
+                    eligible = (
+                        slab_vals.get("minimum_quantity", 0) > 0
+                        and total_qty >= flt(slab_vals["minimum_quantity"])
+                    )
+
+                # 3️⃣ Based on Minimum Quantity and Amount
                 elif validation_type == "Based on Minimum Quantity and Amount":
-                    if (
-                        slab_vals["minimum_quantity"] > 0
-                        and total_qty >= slab_vals["minimum_quantity"]
-                        and slab_vals["amount_off"] > 0
-                    ):
-                        eligible = True
+                    eligible = (
+                        slab_vals.get("minimum_quantity", 0) > 0
+                        and total_qty >= flt(slab_vals["minimum_quantity"])
+                        and total_amount >= flt(slab_vals.get("amount_off", 0))
+                    )
 
+                # fallback (should rarely hit)
                 else:
-                    eligible = (total_amount > 0 or total_qty > 0)
-
+                    eligible = False
 
                 display_item = key if key else "-"
                 # Extract free product and amount off from scheme rules (first rule only)
