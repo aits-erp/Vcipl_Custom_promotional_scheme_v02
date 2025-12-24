@@ -216,18 +216,19 @@ def apply_promotional_schemes(doc, method):
                     free_qty = flt(slab.free_quantity or 0)
 
                     # CASE 1: free specific product
-                    if slab.free_product:
-                        add_free_items_to_invoice(
-                            doc, matching_items, free_qty, scheme_doc.name,
-                            free_product=slab.free_product, per_item=False
-                        )
+                    # if slab.free_product:
+                    #     add_free_items_to_invoice(
+                    #         doc, matching_items, free_qty, scheme_doc.name,
+                    #         free_product=slab.free_product, per_item=False
+                    #     )
 
                     # CASE 2: same product free
-                    else:
-                        add_free_items_to_invoice(
-                            doc, matching_items, free_qty, scheme_doc.name,
-                            free_product=None, per_item=True
-                        )
+                    # else:
+                    #     add_free_items_to_invoice(
+                    #         doc, matching_items, free_qty, scheme_doc.name,
+                    #         free_product=None, per_item=True
+                    #     )
+
         elif scheme_doc.type_of_promo_validation == "Based on Minimum Quantity & Amount":
             total_qty = flt(sum((it.qty or 0) for it in matching_items))
             total_without_gst = flt(sum((it.base_net_amount or 0) for it in matching_items))
@@ -251,11 +252,11 @@ def apply_promotional_schemes(doc, method):
                             pass
 
                     # Optionally add free qty also
-                    if free_qty > 0:
-                        add_free_items_to_invoice(
-                            doc, matching_items, free_qty, scheme_doc.name,
-                            free_product=None, per_item=True
-                        )
+                    # if free_qty > 0:
+                    #     add_free_items_to_invoice(
+                    #         doc, matching_items, free_qty, scheme_doc.name,
+                    #         free_product=None, per_item=True
+                    #     )
 
                     frappe.msgprint(f"Promotional Scheme '{scheme_doc.name}' applied: Amount Off {amount_off}.")
 

@@ -193,6 +193,42 @@ def _apply_report_filters(result_rows, filters):
     if filters.get("discount_max") is not None:
         rows = [r for r in rows if flt(r.get("discount_percentage") or 0) <= flt(filters.get("discount_max"))]
 
+    if filters.get("min_free_qty") is not None:
+        rows = [
+            r for r in rows
+            if flt(r.get("free_quantity") or 0) >= flt(filters.get("min_free_qty"))
+        ]
+
+    if filters.get("max_free_qty") is not None:
+        rows = [
+            r for r in rows
+            if flt(r.get("free_quantity") or 0) <= flt(filters.get("max_free_qty"))
+        ]
+
+    # -------------------------
+    # Amount off filters
+    # -------------------------
+    if filters.get("min_amount_off") is not None:
+        rows = [
+            r for r in rows
+            if flt(r.get("amount_off") or 0) >= flt(filters.get("min_amount_off"))
+        ]
+
+    if filters.get("max_amount_off") is not None:
+        rows = [
+            r for r in rows
+            if flt(r.get("amount_off") or 0) <= flt(filters.get("max_amount_off"))
+        ]
+
+    # -------------------------
+    # Free product filter
+    # -------------------------
+    if filters.get("free_product"):
+        rows = [
+            r for r in rows
+            if (r.get("free_product") or "") == filters.get("free_product")
+        ]
+
     # show_only_eligible toggle (JS default is 1)
     if filters.get("show_only_eligible") in (1, "1", True, "True", "true"):
         rows = [r for r in rows if (r.get("eligibility_status") or "").lower() == "eligible"]

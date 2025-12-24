@@ -79,8 +79,35 @@ frappe.query_reports["Custom Promotional Scheme Report"] = {
             "label": __("Show Only Eligible"),
             "fieldtype": "Check",
             "default": 1
+        },
+        {
+            "fieldname": "min_free_qty",
+            "label": __("Min Free Qty"),
+            "fieldtype": "Float"
+        },
+        {
+            "fieldname": "max_free_qty",
+            "label": __("Max Free Qty"),
+            "fieldtype": "Float"
+        },
+        {
+            "fieldname": "min_amount_off",
+            "label": __("Min Amount Off"),
+            "fieldtype": "Currency"
+        },
+        {
+            "fieldname": "max_amount_off",
+            "label": __("Max Amount Off"),
+            "fieldtype": "Currency"
+        },
+        {
+            "fieldname": "free_product",
+            "label": __("Free Product"),
+            "fieldtype": "Link",
+            "options": "Item"
         }
     ],
+};
 
     // Optional: dynamically set party_name options when party_type changes
     // onload: function(report) {
@@ -100,4 +127,3 @@ frappe.query_reports["Custom Promotional Scheme Report"] = {
     //         party_name_field.refresh();
     //     };
     // }
-};
