@@ -62,27 +62,6 @@ def _extract_values_from_child_rows(doc, fieldname, possible_keys=None):
                     break
     return vals
 
-# def _extract_item_codes_from_scheme(scheme_doc):
-#     item_codes = set()
-#     # Item codes table (child)
-#     try:
-#         item_code_vals = _extract_values_from_child_rows(scheme_doc, "promotional_scheme_on_item_code", possible_keys=["item_code", "item"])
-#         item_codes.update(item_code_vals)
-#     except Exception:
-#         pass
-
-#     # Item groups -> expand to item codes
-#     try:
-#         item_group_vals = _extract_values_from_child_rows(scheme_doc, "promotional_scheme_on_item_group", possible_keys=["item_group", "group"])
-#         if item_group_vals:
-#             items = frappe.get_all("Item", filters={"item_group": ["in", list(item_group_vals)]}, pluck="name") or []
-#             item_codes.update(items)
-#     except Exception:
-#         pass
-
-#     # normalize
-#     return set([str(i) for i in item_codes if i])
-
 def _extract_items_and_groups(scheme_doc):
     """
     Return two sets:
@@ -448,7 +427,7 @@ def _select_applicable_slab(scheme_doc, total_qty, total_amount):
     # =====================================================
     # BASED ON MINIMUM QUANTITY AND AMOUNT
     # =====================================================
-    elif validation_type == "Based on Minimum Quantity and Amount":
+    elif validation_type == "Based on Minimum Quantity & Amount":
         rows = scheme_doc.get("free_qty_with_amount_off") or []
 
         applicable = [
