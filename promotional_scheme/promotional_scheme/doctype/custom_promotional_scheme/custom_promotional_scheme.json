@@ -16,14 +16,11 @@
   "valid_from",
   "column_break_pfjs",
   "valid_to",
-  "select_the_type_of_promo_validation_section",
   "eligible_schemes_section",
   "eligible_schemes_html",
   "type_of_promo_validation",
   "amount_discount_slabs_section",
-  "minimum_amount",
-  "column_break_gzww",
-  "discount_percentage",
+  "amount_discount_slabs",
   "quantity_discount_slabs_section",
   "quantity_discount_slabs",
   "quantity_with_free_amount_section",
@@ -94,16 +91,6 @@
    "fieldname": "amount_discount_slabs_section",
    "fieldtype": "Section Break",
    "label": "Amount discount slabs"
-  },
-  {
-   "fieldname": "minimum_amount",
-   "fieldtype": "Float",
-   "label": "Minimum Amount"
-  },
-  {
-   "fieldname": "discount_percentage",
-   "fieldtype": "Float",
-   "label": "Discount Percentage"
   },
   {
    "depends_on": "eval:doc.type_of_promo_validation == \"Based on Minimum Quantity\"",
@@ -184,27 +171,17 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "column_break_gzww",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "select_the_type_of_promo_validation_section",
+   "fieldname": "eligible_schemes_section",
    "fieldtype": "Section Break",
-   "label": "Select the Type of Promo Validation"
+   "label": "Eligible Promotional Schemes"
   },
   {
-    "fieldname": "eligible_schemes_section",
-    "fieldtype": "Section Break",
-    "label": "Eligible Promotional Schemes"
+   "fieldname": "eligible_schemes_html",
+   "fieldtype": "HTML",
+   "label": "Eligible Schemes",
+   "options": "<div id=\"eligible-schemes-container\"></div>",
+   "read_only": 1
   },
-  {
-    "fieldname": "eligible_schemes_html",
-    "fieldtype": "HTML",
-    "label": "Eligible Schemes",
-    "hidden": 0,
-    "read_only": 1,
-    "options": "<div id='eligible-schemes-container'></div>"
-    },
   {
    "fieldname": "type_of_promo_validation",
    "fieldtype": "Select",
@@ -228,12 +205,18 @@
    "fieldtype": "Table",
    "label": "Free Qty with amount off",
    "options": "Promotional Scheme Quantity with Amount"
+  },
+  {
+   "fieldname": "amount_discount_slabs",
+   "fieldtype": "Table",
+   "label": "Amount Discount Slabs",
+   "options": "Promotional scheme Amount Slab"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-12-09 12:28:05.750852",
+ "modified": "2026-01-08 14:23:40.232885",
  "modified_by": "Administrator",
  "module": "Promotional Scheme",
  "name": "Custom Promotional Scheme",

@@ -409,6 +409,16 @@ def _resolve_scheme_rule_values(scheme_doc):
             result["amount_off"] = flt(row.amount_off)
 
     # -------------------------------------------------------
+    # Based on Minimum Amount
+    # -------------------------------------------------------
+    elif validation_type == "Based on Minimum Amount":
+        rows = scheme_doc.get("amount_discount_slabs") or []
+        if rows:
+            row = rows[0]
+            result["minimum_amount"] = flt(row.minimum_amount)
+            result["discount_percentage"] = flt(row.discount_percentage)
+
+    # -------------------------------------------------------
     # Old / fallback logic (backward compatible)
     # -------------------------------------------------------
     else:
@@ -484,6 +494,28 @@ def _select_applicable_slab(scheme_doc, total_qty, total_amount):
             result["minimum_quantity"] = flt(row.min_qty)
             result["free_quantity"] = flt(row.free_qty)
             result["amount_off"] = flt(row.amount_off)
+
+    # =====================================================
+    # Amount slabs
+    # =====================================================
+    elif validation_type == "Based on Minimum Amount":
+        rows = scheme_doc.get("amount_discount_slabs") or []
+
+        applicable = [
+            r for r in rows
+            if flt(r.minimum_amount) <= flt(total_amount)
+        ]
+
+        if applicable:
+            row = max(applicable, key=lambda r: flt(r.minimum_amount))
+        elif rows:
+            row = rows[0]
+        else:
+            row = None
+
+        if row:
+            result["minimum_amount"] = flt(row.minimum_amount)
+            result["discount_percentage"] = flt(row.discount_percentage)
 
     return result
 
@@ -585,8 +617,13 @@ def get_data(filters):
                 # ----------------------------------
 
                 # 1️⃣ Based on Minimum Amount
+                # if validation_type == "Based on Minimum Amount":
+                #     eligible = total_amount >= flt(scheme_doc.minimum_amount or 0)
                 if validation_type == "Based on Minimum Amount":
-                    eligible = total_amount >= flt(scheme_doc.minimum_amount or 0)
+                    eligible = (
+                        slab_vals.get("minimum_amount", 0) > 0
+                        and total_amount >= flt(slab_vals["minimum_amount"])
+                    )
 
                 # 2️⃣ Based on Minimum Quantity
                 elif validation_type == "Based on Minimum Quantity":
@@ -617,10 +654,12 @@ def get_data(filters):
                     "party_name": party_name or "All",
                     "apply_on": scheme_doc.apply_on or "-",
                     "item_or_group": display_item,
-                    "minimum_amount": flt(getattr(scheme_doc, "minimum_amount", 0) or 0),
+                    # "minimum_amount": flt(getattr(scheme_doc, "minimum_amount", 0) or 0),
+                    # "discount_percentage": flt(getattr(scheme_doc, "discount_percentage", 0) or 0),
                     # "minimum_quantity": flt(getattr(scheme_doc, "minimum_quantity", 0) or 0),
-                    "discount_percentage": flt(getattr(scheme_doc, "discount_percentage", 0) or 0),
                     # "free_quantity": flt(getattr(scheme_doc, "free_quantity", 0) or 0),
+                    "minimum_amount": slab_vals["minimum_amount"],
+                    "discount_percentage": slab_vals["discount_percentage"],
                     "minimum_quantity": slab_vals["minimum_quantity"],
                     "free_quantity": slab_vals["free_quantity"],
                     "free_product": slab_vals["free_product"],

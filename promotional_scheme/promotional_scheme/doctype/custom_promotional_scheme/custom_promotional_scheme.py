@@ -28,8 +28,12 @@ class CustomPromotionalScheme(Document):
 
         # 1) Based on Minimum Amount
         if promo_type == "Based on Minimum Amount":
-            if not self.minimum_amount or not self.discount_percentage:
-                frappe.throw("Please specify both Minimum Amount and Discount Percentage.")
+            if not self.amount_discount_slabs:
+                frappe.throw("Please add at least one Amount Discount Slab")
+            
+            for row in self.amount_discount_slabs:
+                if not row.minimum_amount or not row.discount_percentage:
+                    frappe.throw("Each Amount Discount Slab row must have Minimum Amount and Discount Percentage.")
 
         # 2) Based on Minimum Quantity  ---> uses TABLE now
         elif promo_type == "Based on Minimum Quantity":
@@ -206,11 +210,30 @@ def apply_promotional_schemes(doc, method):
 
         # 3) Apply validation logic (amount or quantity)
         if scheme_doc.type_of_promo_validation == "Based on Minimum Amount":
-            total_without_gst = flt(sum(getattr(it, "base_net_amount", 0) or 0 for it in matching_items))
-            if total_without_gst >= flt(scheme_doc.minimum_amount or 0):
-                discount_pct = flt(scheme_doc.discount_percentage or 0)
-                if discount_pct > 0:
-                    apply_discount_to_invoice(doc, matching_items, discount_pct, scheme_doc.name)
+            total_without_gst = flt(
+                sum(getattr(it, "base_net_amount", 0) or 0 for it in matching_items)
+            )
+
+            applicable_slabs = [
+                row for row in scheme_doc.amount_discount_slabs
+                if flt(row.minimum_amount) <= total_without_gst
+            ]
+
+            if not applicable_slabs:
+                continue
+
+            # Pick best slab (highest minimum_amount)
+            slab = max(applicable_slabs, key=lambda r: flt(r.minimum_amount))
+            discount_pct = flt(slab.discount_percentage or 0)
+
+            if discount_pct > 0:
+                apply_discount_to_invoice(
+                    doc,
+                    matching_items,
+                    discount_pct,
+                    scheme_doc.name
+                )
+
         elif scheme_doc.type_of_promo_validation == "Based on Minimum Quantity":
             total_qty = flt(sum((it.qty or 0) for it in matching_items))
 
