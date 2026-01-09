@@ -13,15 +13,34 @@ frappe.query_reports["Custom Promotional Scheme Report"] = {
             "fieldname": "party_type",
             "label": __("Party Type"),
             "fieldtype": "Select",
-            "options": ["", "Customer", "Supplier"]
+            "options": ["", "Customer", "Supplier"],
+            on_change: function () {
+                const party_type = frappe.query_report.get_filter_value("party_type");
+                const party_filter = frappe.query_report.get_filter("party_name");
+
+                // Clear existing value
+                frappe.query_report.set_filter_value("party_name", "");
+
+                if (!party_filter) return;
+
+                if (party_type === "Customer") {
+                    party_filter.df.options = "Customer";
+                } else if (party_type === "Supplier") {
+                    party_filter.df.options = "Supplier";
+                } else {
+                    party_filter.df.options = "";
+                }
+
+                party_filter.refresh();
+            }
         },
         {
             "fieldname": "party_name",
             "label": __("Party"),
             "fieldtype": "Link",
-            "options": "",        // will be dynamic based on party_type (see note below)
-            "dependencies": ["party_type"]
+            "options": ""   // dynamically set above
         },
+
         {
             "fieldname": "apply_on",
             "label": __("Apply On"),
@@ -75,12 +94,6 @@ frappe.query_reports["Custom Promotional Scheme Report"] = {
             "fieldtype": "Float"
         },
         {
-            "fieldname": "show_only_eligible",
-            "label": __("Show Only Eligible"),
-            "fieldtype": "Check",
-            "default": 1
-        },
-        {
             "fieldname": "min_free_qty",
             "label": __("Min Free Qty"),
             "fieldtype": "Float"
@@ -105,25 +118,33 @@ frappe.query_reports["Custom Promotional Scheme Report"] = {
             "label": __("Free Product"),
             "fieldtype": "Link",
             "options": "Item"
+        },
+        {
+            "fieldname": "show_only_eligible",
+            "label": __("Show Only Eligible"),
+            "fieldtype": "Check",
+            "default": 1
         }
     ],
+
+    onload: function (report) {
+        report.page.on("report-rendered", function () {
+            const data = report.data || [];
+            const partySet = new Set();
+
+            data.forEach(row => {
+                if (row.party_name) {
+                    partySet.add(row.party_name);
+                }
+            });
+
+            const partyFilter = report.get_filter("party_name");
+            if (!partyFilter) return;
+
+            const options = ["", ...Array.from(partySet).sort()];
+            partyFilter.df.options = options;
+            partyFilter.refresh();
+        });
+    }
+
 };
-
-    // Optional: dynamically set party_name options when party_type changes
-    // onload: function(report) {
-    //     const party_field = report.fields_dict.party_type;
-    //     const party_name_field = report.fields_dict.party_name;
-    //     if (!party_field || !party_name_field) return;
-
-    //     party_field.df.onchange = function() {
-    //         const val = party_field.get_value();
-    //         if (val === "Supplier") {
-    //             party_name_field.df.options = "Supplier";
-    //         } else if (val === "Customer") {
-    //             party_name_field.df.options = "Customer";
-    //         } else {
-    //             party_name_field.df.options = "";
-    //         }
-    //         party_name_field.refresh();
-    //     };
-    // }

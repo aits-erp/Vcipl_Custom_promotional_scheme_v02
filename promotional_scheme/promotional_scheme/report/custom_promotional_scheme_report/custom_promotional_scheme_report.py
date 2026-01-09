@@ -154,8 +154,7 @@ def _apply_report_filters(result_rows, filters):
         rows = [r for r in rows if (r.get("party_type") or "").strip() == filters.get("party_type")]
 
     if filters.get("party_name"):
-        # party_name may be "All" for all customers; do an exact match with provided party link
-        rows = [r for r in rows if (r.get("party_name") or "") == filters.get("party_name")]
+        rows = [r for r in rows if r.get("party_name") == filters.get("party_name")]
 
     if filters.get("apply_on"):
         rows = [r for r in rows if (r.get("apply_on") or "") == filters.get("apply_on")]
